@@ -17,8 +17,8 @@
         android:roundIcon="@drawable/icon_launcher"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <activity
-            android:name=".VideoChatViewActivity"
+
+        <activity android:name=".EnterChannelIdActivity"
             android:screenOrientation="landscape"
             android:theme="@style/FullScreenVideoTheme">
             <intent-filter>
@@ -30,6 +30,11 @@
                 <action android:name="android.intent.action.VIEW" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".VideoChatViewActivity"
+            android:screenOrientation="landscape"
+            android:theme="@style/FullScreenVideoTheme"/>
     </application>
 
 </manifest>
