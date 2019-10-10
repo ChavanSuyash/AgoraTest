@@ -11,11 +11,17 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
+import io.agora.tutorials1v1vcall.base.AppWebChromeClient;
+import io.agora.tutorials1v1vcall.base.AppWebViewClient;
 import io.agora.uikit.logger.LoggerRecyclerView;
 import io.agora.rtc.IRtcEngineEventHandler;
 import io.agora.rtc.RtcEngine;
@@ -49,8 +55,13 @@ public class VideoChatViewActivity extends AppCompatActivity {
     private ImageView mMuteBtn;
     private ImageView mSwitchCameraBtn;
 
+    private ProgressBar progressBar;
+    private WebView wvWhiteBoard;
+
     // Customized logger view
     private LoggerRecyclerView mLogView;
+
+    String channelId;
 
     /**
      * Event handler registered into RTC engine for RTC callbacks.
@@ -129,6 +140,8 @@ public class VideoChatViewActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_video_chat_view);
+        readParams();
+
         initUI();
 
         // Ask for permissions at runtime.
@@ -138,6 +151,16 @@ public class VideoChatViewActivity extends AppCompatActivity {
                 checkSelfPermission(REQUESTED_PERMISSIONS[1], PERMISSION_REQ_ID) &&
                 checkSelfPermission(REQUESTED_PERMISSIONS[2], PERMISSION_REQ_ID)) {
             initEngineAndJoinChannel();
+            loadWhiteBoard();
+        }
+    }
+
+    private void readParams() {
+        Bundle bundle = getIntent().getExtras();
+        try{
+            if(bundle != null) channelId = bundle.getString("channelId");
+        }catch (NullPointerException e){
+            throw e;
         }
     }
 
@@ -151,8 +174,29 @@ public class VideoChatViewActivity extends AppCompatActivity {
 
         mLogView = findViewById(R.id.log_recycler_view);
 
+        initWebView();
+
         // Sample logs are optional.
         showSampleLogs();
+    }
+
+    private void initWebView(){
+        wvWhiteBoard = findViewById(R.id.wvWhiteBoard);
+        progressBar = findViewById(R.id.progress_bar);
+
+        WebSettings wvSettings = wvWhiteBoard.getSettings();
+        wvSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        wvSettings.setUseWideViewPort(true);
+        wvSettings.setLoadWithOverviewMode(true);
+        wvSettings.setJavaScriptEnabled(true);
+
+        WebViewClient webViewClient = new AppWebViewClient(progressBar);
+        wvWhiteBoard.setWebViewClient(webViewClient);
+    }
+
+    private void loadWhiteBoard(){
+        wvWhiteBoard.setWebChromeClient(new AppWebChromeClient(progressBar));
+        wvWhiteBoard.loadUrl("https://tutor-plus-staging.tllms.com/whiteboard/"+channelId+"/false/false/480p");
     }
 
     private void showSampleLogs() {
@@ -256,7 +300,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(token) || TextUtils.equals(token, "#YOUR ACCESS TOKEN#")) {
             token = null; // default, no token
         }
-        mRtcEngine.joinChannel(token, "byjus", "Extra Optional Data", 0);
+        mRtcEngine.joinChannel(token, channelId, "Extra Optional Data", 0);
     }
 
     @Override
