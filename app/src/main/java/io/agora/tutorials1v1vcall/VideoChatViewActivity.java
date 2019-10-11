@@ -251,7 +251,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
         progressBar = findViewById(R.id.progress_bar);
 
         WebSettings wvSettings = wvWhiteBoard.getSettings();
-        wvSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+//        wvSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
         wvSettings.setUseWideViewPort(true);
         wvSettings.setLoadWithOverviewMode(true);
         wvSettings.setJavaScriptEnabled(true);
@@ -372,7 +372,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
         // This is used to set a local preview.
         // The steps setting local and remote view are very similar.
         // But note that if the local user do not have a uid or do
-        // not care what the uid is, he can set his uid as ZERO.
+        // not care what the uid is,K he can set his uid as ZERO.
         // Our server will assign one and return the uid via the event
         // handler callback function (onJoinChannelSuccess) after
         // joining the channel successfully.
