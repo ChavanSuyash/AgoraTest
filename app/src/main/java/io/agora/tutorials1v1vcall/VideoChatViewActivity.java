@@ -262,7 +262,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
 
     private void loadWhiteBoard() {
         wvWhiteBoard.setWebChromeClient(new AppWebChromeClient(progressBar));
-        wvWhiteBoard.loadUrl("https://tutor-plus-staging.tllms.com/whiteboard/" + channelId + "/false/false/480p");
+        wvWhiteBoard.loadUrl("https://tutor-plus-staging.tllms.com/whiteboard/" + channelId + "/false/false/480p/true");
     }
 
     private void showSampleLogs() {
