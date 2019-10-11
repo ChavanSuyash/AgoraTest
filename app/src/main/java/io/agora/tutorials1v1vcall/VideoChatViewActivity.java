@@ -262,7 +262,9 @@ public class VideoChatViewActivity extends AppCompatActivity {
 
     private void loadWhiteBoard() {
         wvWhiteBoard.setWebChromeClient(new AppWebChromeClient(progressBar));
-        wvWhiteBoard.loadUrl("https://tutor-plus-staging.tllms.com/whiteboard/" + channelId + "/false/false/480p/true");
+        String url = "https://tutor-plus-staging.tllms.com/whiteboard/" + channelId + "/false/false/480p/true";
+        wvWhiteBoard.loadUrl(url);
+        mLogView.logI("Whiteboard Url = " + url);
     }
 
     private void showSampleLogs() {
@@ -273,7 +275,6 @@ public class VideoChatViewActivity extends AppCompatActivity {
                 if (mLogView != null) mLogView.setVisibility(View.GONE);
             }
         }, 1000);
-
     }
 
     private boolean checkSelfPermission(String permission, int requestCode) {
@@ -392,7 +393,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(token) || TextUtils.equals(token, "#YOUR ACCESS TOKEN#")) {
             token = null; // default, no token
         }
-        mRtcEngine.joinChannel(token, channelID, "Extra Optional Data", 0);
+        mRtcEngine.joinChannel(null, channelID, "Extra Optional Data", 0);
     }
 
     @Override
