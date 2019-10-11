@@ -1,11 +1,14 @@
 package io.agora.tutorials1v1vcall;
 
 import android.Manifest;
+import android.content.DialogInterface;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.os.Environment;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
@@ -20,6 +23,8 @@ import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
+import java.io.File;
+
 import io.agora.tutorials1v1vcall.base.AppWebChromeClient;
 import io.agora.tutorials1v1vcall.base.AppWebViewClient;
 import io.agora.uikit.logger.LoggerRecyclerView;
@@ -28,8 +33,12 @@ import io.agora.rtc.RtcEngine;
 import io.agora.rtc.video.VideoCanvas;
 import io.agora.rtc.video.VideoEncoderConfiguration;
 
+import static io.agora.rtc.video.VideoEncoderConfiguration.ORIENTATION_MODE.ORIENTATION_MODE_ADAPTIVE;
+
 public class VideoChatViewActivity extends AppCompatActivity {
     private static final String TAG = VideoChatViewActivity.class.getSimpleName();
+    public static final String CHANNEL_ID_KEY = "CHANNEL_NAME";
+
 
     private static final int PERMISSION_REQ_ID = 22;
 
@@ -43,18 +52,12 @@ public class VideoChatViewActivity extends AppCompatActivity {
     };
 
     private RtcEngine mRtcEngine;
-    private boolean mCallEnd;
     private boolean mMuted;
 
     private FrameLayout mLocalContainer;
     private RelativeLayout mRemoteContainer;
-    private SurfaceView mLocalView;
     private SurfaceView mRemoteView;
-
-    private ImageView mCallBtn;
     private ImageView mMuteBtn;
-    private ImageView mSwitchCameraBtn;
-
     private ProgressBar progressBar;
     private WebView wvWhiteBoard;
 
@@ -100,7 +103,79 @@ public class VideoChatViewActivity extends AppCompatActivity {
                 }
             });
         }
+
+        @Override
+        public void onError(int err) {
+            super.onError(err);
+            mLogView.logI("onError = " + err);
+        }
+
+        @Override
+        public void onLastmileQuality(int quality) {
+            super.onLastmileQuality(quality);
+            mLogView.logI("onLastmileQuality = " + quality + "(" + getReadableQuality(quality) + ")");
+            switch (quality) {
+                case 0://The network quality is unknown. Allow recheck.
+                    return;
+                case 1://The network quality is excellent.
+                    setVideoConfiguration(VideoEncoderConfiguration.VD_640x360, false);
+                    break;
+                case 4://Users can communicate only not very smoothly.
+                case 5://The network is so bad that users can hardly communicate.
+                    setVideoConfiguration(null, true);
+                    break;
+                case 6://Users cannot communicate at all.
+                    mRtcEngine.disableLastmileTest();
+                    showInternetDownAlert();
+                    return;
+                case 2://The network quality is quite good, but the bitrate may be slightly lower than excellent.
+                case 3://Users can feel the communication slightly impaired.
+                default://If it returns something else.
+                    setVideoConfiguration(VideoEncoderConfiguration.VD_240x180, false);
+                    break;
+            }
+            mRtcEngine.disableLastmileTest();
+            joinChannel(channelId);
+        }
     };
+
+    public static String getReadableQuality(int value) {
+        switch (value) {
+            case 1:
+                return "Excellent";
+            case 2:
+                return "Good";
+            case 3:
+                return "Poor";
+            case 4:
+                return "Bad";
+            case 5:
+                return "Very Bad";
+            case 6:
+                return "Down";
+            default:
+                return "Unknown";
+        }
+    }
+
+    private void showInternetDownAlert() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                AlertDialog alertDialog = new AlertDialog.Builder(VideoChatViewActivity.this).create();
+                alertDialog.setTitle("Alert");
+                alertDialog.setMessage("Your internet is down, please check the connection and try again.");
+                alertDialog.setButton(AlertDialog.BUTTON_NEUTRAL, "OK",
+                        new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface dialog, int which) {
+                                dialog.dismiss();
+                                VideoChatViewActivity.this.finish();
+                            }
+                        });
+                alertDialog.show();
+            }
+        });
+    }
 
     private void setupRemoteVideo(int uid) {
         // Only one remote video view is available for this
@@ -150,37 +225,28 @@ public class VideoChatViewActivity extends AppCompatActivity {
         if (checkSelfPermission(REQUESTED_PERMISSIONS[0], PERMISSION_REQ_ID) &&
                 checkSelfPermission(REQUESTED_PERMISSIONS[1], PERMISSION_REQ_ID) &&
                 checkSelfPermission(REQUESTED_PERMISSIONS[2], PERMISSION_REQ_ID)) {
-            initEngineAndJoinChannel();
+            initEngineAndSetupVideo();
+            performLastMileTestAndJoinChannel(channelId);
             loadWhiteBoard();
         }
     }
 
     private void readParams() {
-        Bundle bundle = getIntent().getExtras();
-        try{
-            if(bundle != null) channelId = bundle.getString("channelId");
-        }catch (NullPointerException e){
-            throw e;
-        }
+        channelId = getIntent().getStringExtra(CHANNEL_ID_KEY);
+        if (channelId == null) throw new RuntimeException("Channel name cannot be null");
     }
 
     private void initUI() {
         mLocalContainer = findViewById(R.id.local_video_view_container);
         mRemoteContainer = findViewById(R.id.remote_video_view_container);
-
-        mCallBtn = findViewById(R.id.btn_call);
         mMuteBtn = findViewById(R.id.btn_mute);
-        mSwitchCameraBtn = findViewById(R.id.btn_switch_camera);
-
         mLogView = findViewById(R.id.log_recycler_view);
-
         initWebView();
-
         // Sample logs are optional.
         showSampleLogs();
     }
 
-    private void initWebView(){
+    private void initWebView() {
         wvWhiteBoard = findViewById(R.id.wvWhiteBoard);
         progressBar = findViewById(R.id.progress_bar);
 
@@ -194,15 +260,20 @@ public class VideoChatViewActivity extends AppCompatActivity {
         wvWhiteBoard.setWebViewClient(webViewClient);
     }
 
-    private void loadWhiteBoard(){
+    private void loadWhiteBoard() {
         wvWhiteBoard.setWebChromeClient(new AppWebChromeClient(progressBar));
-        wvWhiteBoard.loadUrl("https://tutor-plus-staging.tllms.com/whiteboard/"+channelId+"/false/false/480p");
+        wvWhiteBoard.loadUrl("https://tutor-plus-staging.tllms.com/whiteboard/" + channelId + "/false/false/480p");
     }
 
     private void showSampleLogs() {
-        mLogView.logI("Welcome to Agora 1v1 video call");
-        mLogView.logW("You will see custom logs here");
-        mLogView.logE("You can also use this to show errors");
+        mLogView.logI("Welcome!");
+        mLogView.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (mLogView != null) mLogView.setVisibility(View.GONE);
+            }
+        }, 1000);
+
     }
 
     private boolean checkSelfPermission(String permission, int requestCode) {
@@ -231,7 +302,8 @@ public class VideoChatViewActivity extends AppCompatActivity {
 
             // Here we continue only if all permissions are granted.
             // The permissions can also be granted in the system settings manually.
-            initEngineAndJoinChannel();
+            initEngineAndSetupVideo();
+            performLastMileTestAndJoinChannel(channelId);
         }
     }
 
@@ -244,37 +316,55 @@ public class VideoChatViewActivity extends AppCompatActivity {
         });
     }
 
-    private void initEngineAndJoinChannel() {
+    private void initEngineAndSetupVideo() {
         // This is our usual steps for joining
         // a channel and starting a call.
         initializeEngine();
-        setupVideoConfig();
         setupLocalVideo();
-        joinChannel();
+    }
+
+    private void performLastMileTestAndJoinChannel(String channelID) {
+        int lastMileTestEnableStatus = mRtcEngine.enableLastmileTest();
+
+        //If the method call fails joinChannel directly else handle joinChannel in onLastmileQuality callback.
+        if (lastMileTestEnableStatus < 0) {
+            setVideoConfiguration(VideoEncoderConfiguration.VD_240x180, false);
+            joinChannel(channelID);
+        }
+    }
+
+    private void setVideoConfiguration(VideoEncoderConfiguration.VideoDimensions videoDimensions, Boolean audioOnly) {
+        if (audioOnly) {
+            mLogView.logI("VC_Set_Audio_Only");
+            mRtcEngine.disableVideo();
+        } else {
+            mLogView.logI("VC_Set_" + videoDimensions.height + "x" + videoDimensions.width);
+            mRtcEngine.setParameters("{\"che.extSmoothMode\": true} ");
+            VideoEncoderConfiguration config =
+                    new VideoEncoderConfiguration(videoDimensions,
+                            VideoEncoderConfiguration.FRAME_RATE.FRAME_RATE_FPS_15,
+                            VideoEncoderConfiguration.STANDARD_BITRATE,
+                            ORIENTATION_MODE_ADAPTIVE);
+            mRtcEngine.setVideoEncoderConfiguration(config);
+        }
     }
 
     private void initializeEngine() {
         try {
             mRtcEngine = RtcEngine.create(getBaseContext(), getString(R.string.agora_app_id), mRtcEventHandler);
+            setAgoraSDKLogPath();
         } catch (Exception e) {
             Log.e(TAG, Log.getStackTraceString(e));
             throw new RuntimeException("NEED TO check rtc sdk init fatal error\n" + Log.getStackTraceString(e));
         }
     }
 
-    private void setupVideoConfig() {
-        // In simple use cases, we only need to enable video capturing
-        // and rendering once at the initialization step.
-        // Note: audio recording and playing is enabled by default.
-        mRtcEngine.enableVideo();
-
-        // Please go to this page for detailed explanation
-        // https://docs.agora.io/en/Video/API%20Reference/java/classio_1_1agora_1_1rtc_1_1_rtc_engine.html#af5f4de754e2c1f493096641c5c5c1d8f
-        mRtcEngine.setVideoEncoderConfiguration(new VideoEncoderConfiguration(
-                VideoEncoderConfiguration.VD_640x360,
-                VideoEncoderConfiguration.FRAME_RATE.FRAME_RATE_FPS_15,
-                VideoEncoderConfiguration.STANDARD_BITRATE,
-                VideoEncoderConfiguration.ORIENTATION_MODE.ORIENTATION_MODE_FIXED_PORTRAIT));
+    private void setAgoraSDKLogPath() {
+        String sdkLogPath = Environment.getExternalStorageDirectory().toString() + "/" + getPackageName() + "/";
+        File sdkLogDir = new File(sdkLogPath);
+        Boolean result = sdkLogDir.mkdirs();
+        mRtcEngine.setLogFile(sdkLogPath);
+        mLogView.logI("mkdir = " + result + "and sdkLogPath = " + sdkLogPath);
     }
 
     private void setupLocalVideo() {
@@ -285,13 +375,15 @@ public class VideoChatViewActivity extends AppCompatActivity {
         // Our server will assign one and return the uid via the event
         // handler callback function (onJoinChannelSuccess) after
         // joining the channel successfully.
-        mLocalView = RtcEngine.CreateRendererView(getBaseContext());
+        mRtcEngine.enableVideo();
+        SurfaceView mLocalView = RtcEngine.CreateRendererView(getBaseContext());
         mLocalView.setZOrderMediaOverlay(true);
         mLocalContainer.addView(mLocalView);
         mRtcEngine.setupLocalVideo(new VideoCanvas(mLocalView, VideoCanvas.RENDER_MODE_HIDDEN, 0));
+        mRtcEngine.startPreview();
     }
 
-    private void joinChannel() {
+    private void joinChannel(String channelID) {
         // 1. Users can only see each other after they join the
         // same channel successfully using the same app id.
         // 2. One token is only valid for the channel name that
@@ -300,20 +392,19 @@ public class VideoChatViewActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(token) || TextUtils.equals(token, "#YOUR ACCESS TOKEN#")) {
             token = null; // default, no token
         }
-        mRtcEngine.joinChannel(token, channelId, "Extra Optional Data", 0);
+        mRtcEngine.joinChannel(token, channelID, "Extra Optional Data", 0);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (!mCallEnd) {
-            leaveChannel();
-        }
+        leaveChannel();
         RtcEngine.destroy();
     }
 
     private void leaveChannel() {
-        mRtcEngine.leaveChannel();
+        if (mRtcEngine != null)
+            mRtcEngine.leaveChannel();
     }
 
     public void onLocalAudioMuteClicked(View view) {
@@ -328,40 +419,11 @@ public class VideoChatViewActivity extends AppCompatActivity {
     }
 
     public void onCallClicked(View view) {
-        if (mCallEnd) {
-            startCall();
-            mCallEnd = false;
-            mCallBtn.setImageResource(R.drawable.btn_endcall);
-        } else {
-            endCall();
-            mCallEnd = true;
-            mCallBtn.setImageResource(R.drawable.btn_startcall);
-        }
-
-        showButtons(!mCallEnd);
+        finish();
     }
 
-    private void startCall() {
-        setupLocalVideo();
-        joinChannel();
-    }
-
-    private void endCall() {
-        removeLocalVideo();
-        removeRemoteVideo();
-        leaveChannel();
-    }
-
-    private void removeLocalVideo() {
-        if (mLocalView != null) {
-            mLocalContainer.removeView(mLocalView);
-        }
-        mLocalView = null;
-    }
-
-    private void showButtons(boolean show) {
-        int visibility = show ? View.VISIBLE : View.GONE;
-        mMuteBtn.setVisibility(visibility);
-        mSwitchCameraBtn.setVisibility(visibility);
+    public void onInfoButtonClicked(View view) {
+        View logList = findViewById(R.id.log_recycler_view);
+        logList.setVisibility(logList.isShown() ? View.GONE : View.VISIBLE);
     }
 }

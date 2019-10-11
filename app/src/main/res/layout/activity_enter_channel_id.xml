@@ -1,29 +1,65 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<android.support.constraint.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center_vertical"
-    android:padding="20dp">
-
-    <TextView
-        android:id="@+id/label"
-        android:layout_width="150dp"
-        android:layout_height="wrap_content"
-        android:text="Enter Channel Id"/>
+    tools:context=".EnterChannelIdActivity">
 
     <EditText
-        android:id="@+id/etChannelId"
-        android:layout_width="250dp"
+        android:id="@+id/channel_et"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"/>
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="32dp"
+        android:layout_marginEnd="32dp"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/edit_text_rounded"
+        android:hint="Channel name"
+        android:imeOptions="actionDone"
+        android:inputType="text"
+        android:paddingStart="8dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="12dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.05" />
 
-    <Button
-        android:id="@+id/btNext"
-        android:layout_width="250dp"
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/join_channel_btn"
+        android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:text="Next"/>
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="16dp"
+        android:layout_marginEnd="32dp"
+        android:onClick="joinChannelOnClick"
+        android:padding="18dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="18dp"
+        android:text="Join"
+        android:textAllCaps="false"
+        android:textColor="@color/secondary_text"
+        android:textSize="16sp"
+        app:backgroundTint="@color/white"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/channel_et" />
 
-</LinearLayout>
+    <TextView
+        android:id="@+id/version_tv"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:layout_marginEnd="8dp"
+        android:layout_marginBottom="32dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        tools:text="SDK V 2.3.1" />
+
+
+</android.support.constraint.ConstraintLayout>
