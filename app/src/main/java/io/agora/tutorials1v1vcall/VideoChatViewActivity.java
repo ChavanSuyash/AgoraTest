@@ -21,10 +21,14 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.util.Random;
+import java.util.UUID;
 
+import io.agora.rtc.internal.LastmileProbeConfig;
 import io.agora.tutorials1v1vcall.base.AppWebChromeClient;
 import io.agora.tutorials1v1vcall.base.AppWebViewClient;
 import io.agora.uikit.logger.LoggerRecyclerView;
@@ -60,11 +64,16 @@ public class VideoChatViewActivity extends AppCompatActivity {
     private ImageView mMuteBtn;
     private ProgressBar progressBar;
     private WebView wvWhiteBoard;
+    private TextView remoteQualityTextView;
+    private TextView localQualityTextView;
+
 
     // Customized logger view
     private LoggerRecyclerView mLogView;
 
     String channelId;
+    int retryCount = 0;
+
 
     /**
      * Event handler registered into RTC engine for RTC callbacks.
@@ -94,6 +103,34 @@ public class VideoChatViewActivity extends AppCompatActivity {
         }
 
         @Override
+        public void onNetworkQuality(final int uid, final int txQuality, final int rxQuality) {
+            super.onNetworkQuality(uid, txQuality, rxQuality);
+            Log.d("onNetworkQuality", "onNetworkQuality uid = " + uid);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (remoteQualityTextView != null && localQualityTextView != null) {
+                        if (uid == 0) {
+                            localQualityTextView.setText("tx : " + getReadableQuality(txQuality) + " & " + "rx " + getReadableQuality(rxQuality));
+                            localQualityTextView.bringToFront();
+
+                        } else {
+                            remoteQualityTextView.setText("tx : " + getReadableQuality(txQuality) + " & " + "rx " + getReadableQuality(rxQuality));
+                            remoteQualityTextView.bringToFront();
+
+
+                        }
+                    }
+                }
+            });
+        }
+
+        @Override
+        public void onLastmileProbeResult(LastmileProbeResult result) {
+            super.onLastmileProbeResult(result);
+        }
+
+        @Override
         public void onUserOffline(final int uid, int reason) {
             runOnUiThread(new Runnable() {
                 @Override
@@ -116,6 +153,12 @@ public class VideoChatViewActivity extends AppCompatActivity {
             mLogView.logI("onLastmileQuality = " + quality + "(" + getReadableQuality(quality) + ")");
             switch (quality) {
                 case 0://The network quality is unknown. Allow recheck.
+                    if (retryCount >= 2) {
+                        setVideoConfiguration(VideoEncoderConfiguration.VD_240x180, false);
+                        retryCount = 0;
+                        break;
+                    }
+                    retryCount++;
                     return;
                 case 1://The network quality is excellent.
                     setVideoConfiguration(VideoEncoderConfiguration.VD_640x360, false);
@@ -138,6 +181,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
             joinChannel(channelId);
         }
     };
+    private int localUid;
 
     public static String getReadableQuality(int value) {
         switch (value) {
@@ -229,11 +273,14 @@ public class VideoChatViewActivity extends AppCompatActivity {
             performLastMileTestAndJoinChannel(channelId);
             loadWhiteBoard();
         }
+        remoteQualityTextView = findViewById(R.id.remote_network_quality);
+        localQualityTextView = findViewById(R.id.local_network_quality);
     }
 
     private void readParams() {
         channelId = getIntent().getStringExtra(CHANNEL_ID_KEY);
         if (channelId == null) throw new RuntimeException("Channel name cannot be null");
+        ((TextView) findViewById(R.id.channel_name)).setText("Channel: " + channelId);
     }
 
     private void initUI() {
@@ -378,7 +425,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
         // joining the channel successfully.
         mRtcEngine.enableVideo();
         SurfaceView mLocalView = RtcEngine.CreateRendererView(getBaseContext());
-        mLocalView.setZOrderMediaOverlay(true);
+        mLocalView.setZOrderMediaOverlay(false);
         mLocalContainer.addView(mLocalView);
         mRtcEngine.setupLocalVideo(new VideoCanvas(mLocalView, VideoCanvas.RENDER_MODE_HIDDEN, 0));
         mRtcEngine.startPreview();
@@ -393,7 +440,8 @@ public class VideoChatViewActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(token) || TextUtils.equals(token, "#YOUR ACCESS TOKEN#")) {
             token = null; // default, no token
         }
-        mRtcEngine.joinChannel(null, channelID, "Extra Optional Data", 0);
+        localUid = new Random().nextInt();
+        mRtcEngine.joinChannel(null, channelID, "Extra Optional Data", localUid);
     }
 
     @Override
