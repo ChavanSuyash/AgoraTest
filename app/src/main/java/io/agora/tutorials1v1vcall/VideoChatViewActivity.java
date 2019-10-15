@@ -262,6 +262,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
         readParams();
 
         initUI();
+        localUid = new Random().nextInt();
 
         // Ask for permissions at runtime.
         // This is just an example set of permissions. Other permissions
@@ -280,7 +281,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
     private void readParams() {
         channelId = getIntent().getStringExtra(CHANNEL_ID_KEY);
         if (channelId == null) throw new RuntimeException("Channel name cannot be null");
-        ((TextView) findViewById(R.id.channel_name)).setText("Channel: " + channelId);
+        ((TextView) findViewById(R.id.channel_name)).setText("Channel: " + channelId + " Uid: " + localUid);
     }
 
     private void initUI() {
@@ -309,7 +310,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
 
     private void loadWhiteBoard() {
         wvWhiteBoard.setWebChromeClient(new AppWebChromeClient(progressBar));
-        String url = "https://tutor-plus-staging.tllms.com/whiteboard/" + channelId + "/false/false/480p/true";
+        String url = "https://tutor-plus-staging.tllms.com/whiteboard/" + channelId + "/false/false/480p/true/" + localUid;
         wvWhiteBoard.loadUrl(url);
         mLogView.logI("Whiteboard Url = " + url);
     }
@@ -440,7 +441,6 @@ public class VideoChatViewActivity extends AppCompatActivity {
         if (TextUtils.isEmpty(token) || TextUtils.equals(token, "#YOUR ACCESS TOKEN#")) {
             token = null; // default, no token
         }
-        localUid = new Random().nextInt();
         mRtcEngine.joinChannel(null, channelID, "Extra Optional Data", localUid);
     }
 
