@@ -2,6 +2,7 @@ package io.agora.tutorials1v1vcall;
 
 import android.Manifest;
 import android.content.DialogInterface;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Environment;
@@ -259,11 +260,15 @@ public class VideoChatViewActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_video_chat_view);
+        int prefUid = getPreferences(MODE_PRIVATE).getInt("localUid", -1);
+        if (prefUid == -1) {
+            localUid = new Random().nextInt() & Integer.MAX_VALUE;
+            getPreferences(MODE_PRIVATE).edit().putInt("localUid", localUid).apply();
+        } else {
+            localUid = prefUid;
+        }
         readParams();
-
         initUI();
-        localUid = new Random().nextInt();
-
         // Ask for permissions at runtime.
         // This is just an example set of permissions. Other permissions
         // may be needed, and please refer to our online documents.
