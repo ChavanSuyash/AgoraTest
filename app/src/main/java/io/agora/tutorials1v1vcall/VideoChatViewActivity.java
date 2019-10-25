@@ -2,8 +2,8 @@ package io.agora.tutorials1v1vcall;
 
 import android.Manifest;
 import android.content.DialogInterface;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.support.annotation.NonNull;
@@ -29,14 +29,14 @@ import java.io.File;
 import java.util.Random;
 import java.util.UUID;
 
-import io.agora.rtc.internal.LastmileProbeConfig;
-import io.agora.tutorials1v1vcall.base.AppWebChromeClient;
-import io.agora.tutorials1v1vcall.base.AppWebViewClient;
-import io.agora.uikit.logger.LoggerRecyclerView;
+import io.agora.rtc.Constants;
 import io.agora.rtc.IRtcEngineEventHandler;
 import io.agora.rtc.RtcEngine;
 import io.agora.rtc.video.VideoCanvas;
 import io.agora.rtc.video.VideoEncoderConfiguration;
+import io.agora.tutorials1v1vcall.base.AppWebChromeClient;
+import io.agora.tutorials1v1vcall.base.AppWebViewClient;
+import io.agora.uikit.logger.LoggerRecyclerView;
 
 import static io.agora.rtc.video.VideoEncoderConfiguration.ORIENTATION_MODE.ORIENTATION_MODE_ADAPTIVE;
 
@@ -64,13 +64,21 @@ public class VideoChatViewActivity extends AppCompatActivity {
     private SurfaceView mRemoteView;
     private ImageView mMuteBtn;
     private ProgressBar progressBar;
-    private WebView wvWhiteBoard;
+    private WebView webView;
     private TextView remoteQualityTextView;
     private TextView localQualityTextView;
+    private int localUid;
+    public static final int COMMUNICATION_MODE = 100;
+    public static final int AUDIENCE_MODE = 300;
+    public static final int HOST_MODE = 400;
+    public static final int WHITE_BOARD_ONLY = 500;
+    public static final int ONE_TO_MANY_BYJUS = 600;
+    public static final String SESSION_MODE = "SESSION_MODE";
+    private int sessionMode;
 
 
     // Customized logger view
-    private LoggerRecyclerView mLogView;
+    private LoggerRecyclerView appLogView, webLogView;
 
     String channelId;
     int retryCount = 0;
@@ -87,7 +95,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    mLogView.logI("Join channel success, uid: " + (uid & 0xFFFFFFFFL));
+                    appLogView.logI("Join channel success, uid: " + (uid & 0xFFFFFFFFL));
                 }
             });
         }
@@ -97,10 +105,18 @@ public class VideoChatViewActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    mLogView.logI("First remote video decoded, uid: " + (uid & 0xFFFFFFFFL));
+                    appLogView.logI("First remote video decoded, uid: " + (uid & 0xFFFFFFFFL));
+                    if (isBroadcastHostMode())
+                        appLogView.logE("Two or more users joined with role Broadcaster. Invalid use case");
                     setupRemoteVideo(uid);
                 }
             });
+        }
+
+        @Override
+        public void onUserMuteAudio(int uid, boolean muted) {
+            super.onUserMuteAudio(uid, muted);
+            setupRemoteVideo(uid);
         }
 
         @Override
@@ -111,15 +127,18 @@ public class VideoChatViewActivity extends AppCompatActivity {
                 @Override
                 public void run() {
                     if (remoteQualityTextView != null && localQualityTextView != null) {
+                        String qualityText = "tx: " + txQuality + "(" + getReadableQuality(txQuality) + ") & rx: " + txQuality + "(" + getReadableQuality(rxQuality) + ")";
+                        Log.d(TAG, "quality " + qualityText);
                         if (uid == 0) {
-                            localQualityTextView.setText("tx : " + getReadableQuality(txQuality) + " & " + "rx " + getReadableQuality(rxQuality));
-                            localQualityTextView.bringToFront();
-
+                            if (!localQualityTextView.getText().toString().trim().equals(qualityText.trim())) {
+                                localQualityTextView.setText(qualityText);
+                                localQualityTextView.bringToFront();
+                            }
                         } else {
-                            remoteQualityTextView.setText("tx : " + getReadableQuality(txQuality) + " & " + "rx " + getReadableQuality(rxQuality));
-                            remoteQualityTextView.bringToFront();
-
-
+                            if (!remoteQualityTextView.getText().toString().trim().equals(qualityText.trim())) {
+                                remoteQualityTextView.setText(qualityText);
+                                remoteQualityTextView.bringToFront();
+                            }
                         }
                     }
                 }
@@ -136,7 +155,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    mLogView.logI("User offline, uid: " + (uid & 0xFFFFFFFFL));
+                    appLogView.logI("User offline, uid: " + (uid & 0xFFFFFFFFL));
                     onRemoteUserLeft();
                 }
             });
@@ -145,13 +164,13 @@ public class VideoChatViewActivity extends AppCompatActivity {
         @Override
         public void onError(int err) {
             super.onError(err);
-            mLogView.logI("onError = " + err);
+            appLogView.logI("onError = " + err);
         }
 
         @Override
         public void onLastmileQuality(int quality) {
             super.onLastmileQuality(quality);
-            mLogView.logI("onLastmileQuality = " + quality + "(" + getReadableQuality(quality) + ")");
+            appLogView.logI("onLastmileQuality = " + quality + "(" + getReadableQuality(quality) + ")");
             switch (quality) {
                 case 0://The network quality is unknown. Allow recheck.
                     if (retryCount >= 2) {
@@ -161,9 +180,6 @@ public class VideoChatViewActivity extends AppCompatActivity {
                     }
                     retryCount++;
                     return;
-                case 1://The network quality is excellent.
-                    setVideoConfiguration(VideoEncoderConfiguration.VD_640x360, false);
-                    break;
                 case 4://Users can communicate only not very smoothly.
                 case 5://The network is so bad that users can hardly communicate.
                     setVideoConfiguration(null, true);
@@ -172,6 +188,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
                     mRtcEngine.disableLastmileTest();
                     showInternetDownAlert();
                     return;
+                case 1://The network quality is excellent.
                 case 2://The network quality is quite good, but the bitrate may be slightly lower than excellent.
                 case 3://Users can feel the communication slightly impaired.
                 default://If it returns something else.
@@ -182,7 +199,6 @@ public class VideoChatViewActivity extends AppCompatActivity {
             joinChannel(channelId);
         }
     };
-    private int localUid;
 
     public static String getReadableQuality(int value) {
         switch (value) {
@@ -241,7 +257,8 @@ public class VideoChatViewActivity extends AppCompatActivity {
 
         mRemoteView = RtcEngine.CreateRendererView(getBaseContext());
         mRemoteContainer.addView(mRemoteView);
-        mRtcEngine.setupRemoteVideo(new VideoCanvas(mRemoteView, VideoCanvas.RENDER_MODE_HIDDEN, uid));
+        mRtcEngine.setupRemoteVideo(
+                new VideoCanvas(mRemoteView, isBroadcastAudienceMode() ? VideoCanvas.RENDER_MODE_FIT : VideoCanvas.RENDER_MODE_HIDDEN, uid));
         mRemoteView.setTag(uid);
     }
 
@@ -259,9 +276,11 @@ public class VideoChatViewActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        sessionMode = getIntent().getIntExtra(SESSION_MODE, 100);
         setContentView(R.layout.activity_video_chat_view);
         int prefUid = getPreferences(MODE_PRIVATE).getInt("localUid", -1);
         if (prefUid == -1) {
+            UUID.randomUUID().toString().replace("-", "").trim().substring(0, 8);
             localUid = new Random().nextInt() & Integer.MAX_VALUE;
             getPreferences(MODE_PRIVATE).edit().putInt("localUid", localUid).apply();
         } else {
@@ -269,6 +288,13 @@ public class VideoChatViewActivity extends AppCompatActivity {
         }
         readParams();
         initUI();
+        loadWhiteBoard();
+
+        if (isWhiteBoardOnlyMode()) {
+            findViewById(R.id.parent_video_view_container).setVisibility(View.GONE);
+            return;
+        }
+
         // Ask for permissions at runtime.
         // This is just an example set of permissions. Other permissions
         // may be needed, and please refer to our online documents.
@@ -277,57 +303,89 @@ public class VideoChatViewActivity extends AppCompatActivity {
                 checkSelfPermission(REQUESTED_PERMISSIONS[2], PERMISSION_REQ_ID)) {
             initEngineAndSetupVideo();
             performLastMileTestAndJoinChannel(channelId);
-            loadWhiteBoard();
+            //loadWhiteBoard();
         }
-        remoteQualityTextView = findViewById(R.id.remote_network_quality);
-        localQualityTextView = findViewById(R.id.local_network_quality);
     }
 
     private void readParams() {
         channelId = getIntent().getStringExtra(CHANNEL_ID_KEY);
         if (channelId == null) throw new RuntimeException("Channel name cannot be null");
-        ((TextView) findViewById(R.id.channel_name)).setText("Channel: " + channelId + " Uid: " + localUid);
+        ((TextView) findViewById(R.id.channel_name)).setText("Channel: " + channelId + " Uid: " + localUid + "\n" + getReadableMode());
     }
 
     private void initUI() {
         mLocalContainer = findViewById(R.id.local_video_view_container);
         mRemoteContainer = findViewById(R.id.remote_video_view_container);
         mMuteBtn = findViewById(R.id.btn_mute);
-        mLogView = findViewById(R.id.log_recycler_view);
+        appLogView = findViewById(R.id.app_log_recycler_view);
+        webLogView = findViewById(R.id.web_log_recycler_view);
+        remoteQualityTextView = findViewById(R.id.remote_network_quality);
+        localQualityTextView = findViewById(R.id.local_network_quality);
         initWebView();
         // Sample logs are optional.
         showSampleLogs();
     }
 
     private void initWebView() {
-        wvWhiteBoard = findViewById(R.id.wvWhiteBoard);
+        webView = findViewById(R.id.webView);
         progressBar = findViewById(R.id.progress_bar);
 
-        WebSettings wvSettings = wvWhiteBoard.getSettings();
-//        wvSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
-        wvSettings.setUseWideViewPort(true);
-        wvSettings.setLoadWithOverviewMode(true);
+        WebSettings wvSettings = webView.getSettings();
+
         wvSettings.setJavaScriptEnabled(true);
+        wvSettings.setLoadWithOverviewMode(true);
+        wvSettings.setUseWideViewPort(true);
+
+        wvSettings.setSupportZoom(true);
+        wvSettings.setBuiltInZoomControls(true);
+        wvSettings.setDisplayZoomControls(false);
+
+        webView.setScrollBarStyle(WebView.SCROLLBARS_OUTSIDE_OVERLAY);
+        webView.setScrollbarFadingEnabled(false);
 
         WebViewClient webViewClient = new AppWebViewClient(progressBar);
-        wvWhiteBoard.setWebViewClient(webViewClient);
+
+
+        //turn on debugging
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            WebView.setWebContentsDebuggingEnabled(true);
+        }
+        webView.setWebViewClient(webViewClient);
     }
 
     private void loadWhiteBoard() {
-        wvWhiteBoard.setWebChromeClient(new AppWebChromeClient(progressBar));
+        webView.setWebChromeClient(new AppWebChromeClient(progressBar, webLogView));
         String url = "https://tutor-plus-staging.tllms.com/whiteboard/" + channelId + "/false/false/480p/true/" + localUid;
-        wvWhiteBoard.loadUrl(url);
-        mLogView.logI("Whiteboard Url = " + url);
+        webView.loadUrl(url);
+        appLogView.logI("Whiteboard Url = " + url);
     }
 
     private void showSampleLogs() {
-        mLogView.logI("Welcome!");
-        mLogView.postDelayed(new Runnable() {
+        appLogView.logI("App logs will be streamed here");
+        appLogView.logI("Session mode = " + getReadableMode());
+        webLogView.logW("Web logs will be streamed here");
+        appLogView.postDelayed(new Runnable() {
             @Override
             public void run() {
-                if (mLogView != null) mLogView.setVisibility(View.GONE);
+                if (appLogView != null) appLogView.setVisibility(View.GONE);
+                if (webLogView != null) webLogView.setVisibility(View.GONE);
             }
-        }, 1000);
+        }, 500);
+    }
+
+    private String getReadableMode() {
+        switch (sessionMode) {
+            case COMMUNICATION_MODE:
+                return "1to1 Mode";
+            case HOST_MODE:
+                return "Broadcast Mode - Host Role";
+            case AUDIENCE_MODE:
+                return "Broadcast Mode - Audience Role";
+            case WHITE_BOARD_ONLY:
+                return "Whiteboard Only Mode";
+            default:
+                return "Unknown";
+        }
     }
 
     private boolean checkSelfPermission(String permission, int requestCode) {
@@ -336,14 +394,12 @@ public class VideoChatViewActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, REQUESTED_PERMISSIONS, requestCode);
             return false;
         }
-
         return true;
     }
 
     @Override
-    public void onRequestPermissionsResult(int requestCode,
-                                           @NonNull String[] permissions, @NonNull int[] grantResults) {
-
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
         if (requestCode == PERMISSION_REQ_ID) {
             if (grantResults[0] != PackageManager.PERMISSION_GRANTED ||
                     grantResults[1] != PackageManager.PERMISSION_GRANTED ||
@@ -374,10 +430,15 @@ public class VideoChatViewActivity extends AppCompatActivity {
         // This is our usual steps for joining
         // a channel and starting a call.
         initializeEngine();
+        mRtcEngine.enableVideo();
         setupLocalVideo();
     }
 
     private void performLastMileTestAndJoinChannel(String channelID) {
+        if (isBroadcastAudienceMode()) {
+            joinChannel(channelID);
+            return;
+        }
         int lastMileTestEnableStatus = mRtcEngine.enableLastmileTest();
 
         //If the method call fails joinChannel directly else handle joinChannel in onLastmileQuality callback.
@@ -387,12 +448,13 @@ public class VideoChatViewActivity extends AppCompatActivity {
         }
     }
 
-    private void setVideoConfiguration(VideoEncoderConfiguration.VideoDimensions videoDimensions, Boolean audioOnly) {
+    private void setVideoConfiguration(VideoEncoderConfiguration.VideoDimensions
+                                               videoDimensions, Boolean audioOnly) {
         if (audioOnly) {
-            mLogView.logI("VC_Set_Audio_Only");
+            appLogView.logI("VC_Set_Audio_Only");
             mRtcEngine.disableVideo();
         } else {
-            mLogView.logI("VC_Set_" + videoDimensions.height + "x" + videoDimensions.width);
+            appLogView.logI("VC_Set_" + videoDimensions.height + "x" + videoDimensions.width);
             mRtcEngine.setParameters("{\"che.extSmoothMode\": true} ");
             VideoEncoderConfiguration config =
                     new VideoEncoderConfiguration(videoDimensions,
@@ -407,6 +469,12 @@ public class VideoChatViewActivity extends AppCompatActivity {
         try {
             mRtcEngine = RtcEngine.create(getBaseContext(), getString(R.string.agora_app_id), mRtcEventHandler);
             setAgoraSDKLogPath();
+            if (isBroadcastMode() || isOneToMany())
+                mRtcEngine.setChannelProfile(Constants.CHANNEL_PROFILE_LIVE_BROADCASTING);
+            if (isBroadcastHostMode() || isOneToMany())
+                mRtcEngine.setClientRole(Constants.CLIENT_ROLE_BROADCASTER);
+            else if (isBroadcastAudienceMode())
+                mRtcEngine.setClientRole(Constants.CLIENT_ROLE_AUDIENCE);
         } catch (Exception e) {
             Log.e(TAG, Log.getStackTraceString(e));
             throw new RuntimeException("NEED TO check rtc sdk init fatal error\n" + Log.getStackTraceString(e));
@@ -418,10 +486,16 @@ public class VideoChatViewActivity extends AppCompatActivity {
         File sdkLogDir = new File(sdkLogPath);
         Boolean result = sdkLogDir.mkdirs();
         mRtcEngine.setLogFile(sdkLogPath);
-        mLogView.logI("mkdir = " + result + "and sdkLogPath = " + sdkLogPath);
+        appLogView.logI("mkdir = " + result + "and sdkLogPath = " + sdkLogPath);
     }
 
     private void setupLocalVideo() {
+        if (isBroadcastAudienceMode()) {
+            findViewById(R.id.local_video_parent).setVisibility(View.GONE);
+            return;
+        } else if (isBroadcastHostMode()) {
+            findViewById(R.id.remote_video_parent).setVisibility(View.GONE);
+        }
         // This is used to set a local preview.
         // The steps setting local and remote view are very similar.
         // But note that if the local user do not have a uid or do
@@ -429,11 +503,11 @@ public class VideoChatViewActivity extends AppCompatActivity {
         // Our server will assign one and return the uid via the event
         // handler callback function (onJoinChannelSuccess) after
         // joining the channel successfully.
-        mRtcEngine.enableVideo();
         SurfaceView mLocalView = RtcEngine.CreateRendererView(getBaseContext());
         mLocalView.setZOrderMediaOverlay(false);
         mLocalContainer.addView(mLocalView);
-        mRtcEngine.setupLocalVideo(new VideoCanvas(mLocalView, VideoCanvas.RENDER_MODE_HIDDEN, 0));
+        mRtcEngine.setupLocalVideo(
+                new VideoCanvas(mLocalView, isBroadcastHostMode() ? VideoCanvas.RENDER_MODE_FIT : VideoCanvas.RENDER_MODE_HIDDEN, 0));
         mRtcEngine.startPreview();
     }
 
@@ -476,8 +550,41 @@ public class VideoChatViewActivity extends AppCompatActivity {
         finish();
     }
 
-    public void onInfoButtonClicked(View view) {
-        View logList = findViewById(R.id.log_recycler_view);
-        logList.setVisibility(logList.isShown() ? View.GONE : View.VISIBLE);
+    public void onAppInfoButtonClicked(View view) {
+        appLogView.setVisibility(appLogView.isShown() ? View.GONE : View.VISIBLE);
+        if (appLogView.isShown()) {
+            webLogView.setVisibility(View.GONE);
+        }
+    }
+
+    public void onWebInfoButtonClicked(View view) {
+        webLogView.setVisibility(webLogView.isShown() ? View.GONE : View.VISIBLE);
+        if (webLogView.isShown()) {
+            appLogView.setVisibility(View.GONE);
+        }
+    }
+
+    public Boolean isCommunicationMode() {
+        return sessionMode == COMMUNICATION_MODE;
+    }
+
+    public Boolean isBroadcastMode() {
+        return sessionMode == HOST_MODE || sessionMode == AUDIENCE_MODE;
+    }
+
+    public Boolean isBroadcastAudienceMode() {
+        return sessionMode == AUDIENCE_MODE;
+    }
+
+    public Boolean isBroadcastHostMode() {
+        return sessionMode == HOST_MODE;
+    }
+
+    public Boolean isWhiteBoardOnlyMode() {
+        return sessionMode == WHITE_BOARD_ONLY;
+    }
+
+    public Boolean isOneToMany() {
+        return sessionMode == ONE_TO_MANY_BYJUS;
     }
 }

@@ -12,12 +12,10 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_above="@id/control_panel"
-        android:layout_toStartOf="@id/parent_video_view_container"
-        android:layout_toLeftOf="@id/parent_video_view_container">
-
+        android:layout_toStartOf="@id/parent_video_view_container">
 
         <WebView
-            android:id="@+id/wvWhiteBoard"
+            android:id="@+id/webView"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />
 
@@ -31,7 +29,7 @@
 
     <LinearLayout
         android:id="@+id/parent_video_view_container"
-        android:layout_width="260dp"
+        android:layout_width="220dp"
         android:layout_height="match_parent"
         android:layout_above="@id/control_panel"
         android:layout_alignParentTop="true"
@@ -40,6 +38,7 @@
         android:orientation="vertical">
 
         <FrameLayout
+            android:id="@+id/local_video_parent"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">
@@ -61,16 +60,18 @@
 
             <TextView
                 android:id="@+id/local_network_quality"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_margin="8dp"
+                android:text="Local Network Quailty"
                 android:textColor="@color/white"
-                tools:text="Network Quailty:" />
+                android:textSize="12sp" />
 
         </FrameLayout>
 
 
         <FrameLayout
+            android:id="@+id/remote_video_parent"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1">
@@ -92,12 +93,12 @@
 
             <TextView
                 android:id="@+id/remote_network_quality"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_alignParentTop="true"
                 android:layout_margin="8dp"
                 android:textColor="@color/white"
-                tools:text="Network Quailty:" />
+                android:textSize="12sp"
+                android:text="Remote Network Quality" />
 
         </FrameLayout>
 
@@ -109,7 +110,7 @@
         android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:background="#80000000"
-        android:padding="8dp">
+        android:padding="6dp">
 
         <ImageView
             android:id="@+id/btn_call"
@@ -146,31 +147,63 @@
     </RelativeLayout>
 
     <io.agora.uikit.logger.LoggerRecyclerView
-        android:id="@+id/log_recycler_view"
-        android:layout_width="@dimen/log_container_width"
+        android:id="@+id/app_log_recycler_view"
+        android:layout_width="match_parent"
         android:layout_height="@dimen/log_container_height"
         android:layout_above="@+id/control_panel"
         android:layout_marginLeft="@dimen/activity_horizontal_margin"
         android:layout_marginRight="@dimen/activity_horizontal_margin"
-        android:layout_marginBottom="@dimen/activity_vertical_margin" />
+        android:layout_marginBottom="@dimen/activity_vertical_margin"
+        android:layout_toStartOf="@id/parent_video_view_container" />
 
+    <io.agora.uikit.logger.LoggerRecyclerView
+        android:id="@+id/web_log_recycler_view"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/log_container_height"
+        android:layout_above="@+id/control_panel"
+        android:layout_marginLeft="@dimen/activity_horizontal_margin"
+        android:layout_marginRight="@dimen/activity_horizontal_margin"
+        android:layout_marginBottom="@dimen/activity_vertical_margin"
+        android:layout_toStartOf="@id/parent_video_view_container" />
 
     <FrameLayout
+        android:id="@+id/info_app_log_parnet"
         android:layout_width="28dp"
         android:layout_height="28dp"
         android:layout_alignParentBottom="true"
         android:layout_margin="8dp">
 
         <android.support.v7.widget.AppCompatImageView
-            android:id="@+id/info_button"
+            android:id="@+id/info_button_app"
             android:layout_width="28dp"
             android:layout_height="28dp"
             android:layout_gravity="center"
             android:background="@drawable/button_background"
-            android:onClick="onInfoButtonClicked"
+            android:onClick="onAppInfoButtonClicked"
             android:padding="8dp"
             android:scaleType="centerCrop"
             android:tint="@color/white"
+            app:srcCompat="@drawable/info" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/info_web_log_parent"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_alignParentBottom="true"
+        android:layout_margin="8dp"
+        android:layout_toEndOf="@+id/info_app_log_parnet">
+
+        <android.support.v7.widget.AppCompatImageView
+            android:id="@+id/info_button_web"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="center"
+            android:background="@drawable/button_background"
+            android:onClick="onWebInfoButtonClicked"
+            android:padding="8dp"
+            android:scaleType="centerCrop"
+            android:tint="@android:color/holo_orange_light"
             app:srcCompat="@drawable/info" />
     </FrameLayout>
 
@@ -182,6 +215,8 @@
         android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true"
         android:layout_margin="8dp"
+        android:textSize="12sp"
         android:textColor="@color/white"
         tools:text="channelName" />
+
 </RelativeLayout>
