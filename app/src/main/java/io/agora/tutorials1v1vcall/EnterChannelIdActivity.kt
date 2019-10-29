@@ -16,7 +16,6 @@ import android.text.InputType
 import android.util.Base64
 import android.view.SubMenu
 
-
 class EnterChannelIdActivity : AppCompatActivity() {
 
     private var subMenu: SubMenu? = null
@@ -108,7 +107,7 @@ class EnterChannelIdActivity : AppCompatActivity() {
         }
     }
 
-    fun String.encode(): String {
+    private fun String.encode(): String {
         return Base64.encodeToString(this.toByteArray(charset("UTF-8")), Base64.NO_WRAP)
     }
 

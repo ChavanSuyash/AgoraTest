@@ -27,7 +27,6 @@ import android.widget.Toast;
 
 import java.io.File;
 import java.util.Random;
-import java.util.UUID;
 
 import io.agora.rtc.Constants;
 import io.agora.rtc.IRtcEngineEventHandler;
@@ -38,6 +37,7 @@ import io.agora.tutorials1v1vcall.base.AppWebChromeClient;
 import io.agora.tutorials1v1vcall.base.AppWebViewClient;
 import io.agora.uikit.logger.LoggerRecyclerView;
 
+import static io.agora.rtc.Constants.REMOTE_VIDEO_STATE_DECODING;
 import static io.agora.rtc.video.VideoEncoderConfiguration.ORIENTATION_MODE.ORIENTATION_MODE_ADAPTIVE;
 
 public class VideoChatViewActivity extends AppCompatActivity {
@@ -57,12 +57,13 @@ public class VideoChatViewActivity extends AppCompatActivity {
     };
 
     private RtcEngine mRtcEngine;
-    private boolean mMuted;
+    private boolean mAudioMuted;
+    private boolean mVideoMuted;
 
     private FrameLayout mLocalContainer;
     private RelativeLayout mRemoteContainer;
     private SurfaceView mRemoteView;
-    private ImageView mMuteBtn;
+    private ImageView mMuteAudioBtn, mMuteVideoBtn;
     private ProgressBar progressBar;
     private WebView webView;
     private TextView remoteQualityTextView;
@@ -100,17 +101,26 @@ public class VideoChatViewActivity extends AppCompatActivity {
             });
         }
 
+
         @Override
-        public void onFirstRemoteVideoDecoded(final int uid, int width, int height, int elapsed) {
-            runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    appLogView.logI("First remote video decoded, uid: " + (uid & 0xFFFFFFFFL));
-                    if (isBroadcastHostMode())
-                        appLogView.logE("Two or more users joined with role Broadcaster. Invalid use case");
-                    setupRemoteVideo(uid);
-                }
-            });
+        public void onRemoteVideoStateChanged(final int uid, int state, int reason, int elapsed) {
+            super.onRemoteVideoStateChanged(uid, state, reason, elapsed);
+            //If UID ends with 999 we assume it is teacher
+            String uidString = String.valueOf(uid).trim();
+            boolean isTeacherUid = uidString.substring(uidString.length() - 3).equalsIgnoreCase("999");
+            if (!isTeacherUid) return;
+
+            if (state == REMOTE_VIDEO_STATE_DECODING) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        appLogView.logI("First remote video decoded, uid: " + (uid & 0xFFFFFFFFL));
+                        if (isBroadcastHostMode())
+                            appLogView.logE("Two or more users joined with role Broadcaster. Invalid use case");
+                        setupRemoteVideo(uid);
+                    }
+                });
+            }
         }
 
         @Override
@@ -130,9 +140,13 @@ public class VideoChatViewActivity extends AppCompatActivity {
                         String qualityText = "tx: " + txQuality + "(" + getReadableQuality(txQuality) + ") & rx: " + txQuality + "(" + getReadableQuality(rxQuality) + ")";
                         Log.d(TAG, "quality " + qualityText);
                         if (uid == 0) {
+
                             if (!localQualityTextView.getText().toString().trim().equals(qualityText.trim())) {
                                 localQualityTextView.setText(qualityText);
                                 localQualityTextView.bringToFront();
+                            }
+                            if (mVideoMuted) {
+                                localQualityTextView.setText(localQualityTextView.getText() + " - Local video is disabled");
                             }
                         } else {
                             if (!remoteQualityTextView.getText().toString().trim().equals(qualityText.trim())) {
@@ -280,15 +294,31 @@ public class VideoChatViewActivity extends AppCompatActivity {
         setContentView(R.layout.activity_video_chat_view);
         int prefUid = getPreferences(MODE_PRIVATE).getInt("localUid", -1);
         if (prefUid == -1) {
-            UUID.randomUUID().toString().replace("-", "").trim().substring(0, 8);
             localUid = new Random().nextInt() & Integer.MAX_VALUE;
             getPreferences(MODE_PRIVATE).edit().putInt("localUid", localUid).apply();
         } else {
             localUid = prefUid;
         }
+
+        //Start-Just to act as teacher in host mode (Temp)
+        if (isBroadcastHostMode()) {
+            String localUidString = String.valueOf(localUid);
+            String localUidStringSubString = localUidString.substring(0, localUidString.length() - 3);
+            localUid = Integer.parseInt(localUidStringSubString + "999");
+        }
+        //End
+
         readParams();
         initUI();
         loadWhiteBoard();
+
+        if (isOneToMany()) {
+            mAudioMuted = true;
+            mVideoMuted = true;
+
+            mMuteAudioBtn.setImageResource(R.drawable.btn_mute);
+            mMuteVideoBtn.setImageResource(R.drawable.btn_vid_mute);
+        }
 
         if (isWhiteBoardOnlyMode()) {
             findViewById(R.id.parent_video_view_container).setVisibility(View.GONE);
@@ -316,7 +346,8 @@ public class VideoChatViewActivity extends AppCompatActivity {
     private void initUI() {
         mLocalContainer = findViewById(R.id.local_video_view_container);
         mRemoteContainer = findViewById(R.id.remote_video_view_container);
-        mMuteBtn = findViewById(R.id.btn_mute);
+        mMuteAudioBtn = findViewById(R.id.btn_mute);
+        mMuteVideoBtn = findViewById(R.id.btn_vid_mute);
         appLogView = findViewById(R.id.app_log_recycler_view);
         webLogView = findViewById(R.id.web_log_recycler_view);
         remoteQualityTextView = findViewById(R.id.remote_network_quality);
@@ -355,7 +386,8 @@ public class VideoChatViewActivity extends AppCompatActivity {
 
     private void loadWhiteBoard() {
         webView.setWebChromeClient(new AppWebChromeClient(progressBar, webLogView));
-        String url = "https://tutor-plus-staging.tllms.com/whiteboard/" + channelId + "/false/false/480p/true/" + localUid;
+        String url = "https://tutor-plus-staging.tllms.com/whiteboard/" + channelId
+                + "/false/false/480p/true/" + localUid + "/" + (isBroadcastMode() ? "live" : "rtc");
         webView.loadUrl(url);
         appLogView.logI("Whiteboard Url = " + url);
     }
@@ -383,6 +415,8 @@ public class VideoChatViewActivity extends AppCompatActivity {
                 return "Broadcast Mode - Audience Role";
             case WHITE_BOARD_ONLY:
                 return "Whiteboard Only Mode";
+            case ONE_TO_MANY_BYJUS:
+                return "1 to Many Mode";
             default:
                 return "Unknown";
         }
@@ -432,6 +466,15 @@ public class VideoChatViewActivity extends AppCompatActivity {
         initializeEngine();
         mRtcEngine.enableVideo();
         setupLocalVideo();
+
+        if (isOneToMany()) {
+            mRtcEngine.muteLocalVideoStream(true);
+            mRtcEngine.muteLocalAudioStream(true);
+            mRtcEngine.stopPreview();
+            mRtcEngine.enableLocalVideo(false);
+        } else {
+            mRtcEngine.startPreview();
+        }
     }
 
     private void performLastMileTestAndJoinChannel(String channelID) {
@@ -469,8 +512,12 @@ public class VideoChatViewActivity extends AppCompatActivity {
         try {
             mRtcEngine = RtcEngine.create(getBaseContext(), getString(R.string.agora_app_id), mRtcEventHandler);
             setAgoraSDKLogPath();
-            if (isBroadcastMode() || isOneToMany())
+            if (isBroadcastMode() || isOneToMany()) {
                 mRtcEngine.setChannelProfile(Constants.CHANNEL_PROFILE_LIVE_BROADCASTING);
+                mRtcEngine.enableWebSdkInteroperability(true);
+                mRtcEngine.setRemoteSubscribeFallbackOption(Constants.STREAM_FALLBACK_OPTION_AUDIO_ONLY);
+                mRtcEngine.setLocalPublishFallbackOption(Constants.STREAM_FALLBACK_OPTION_AUDIO_ONLY);
+            }
             if (isBroadcastHostMode() || isOneToMany())
                 mRtcEngine.setClientRole(Constants.CLIENT_ROLE_BROADCASTER);
             else if (isBroadcastAudienceMode())
@@ -508,7 +555,6 @@ public class VideoChatViewActivity extends AppCompatActivity {
         mLocalContainer.addView(mLocalView);
         mRtcEngine.setupLocalVideo(
                 new VideoCanvas(mLocalView, isBroadcastHostMode() ? VideoCanvas.RENDER_MODE_FIT : VideoCanvas.RENDER_MODE_HIDDEN, 0));
-        mRtcEngine.startPreview();
     }
 
     private void joinChannel(String channelID) {
@@ -536,10 +582,10 @@ public class VideoChatViewActivity extends AppCompatActivity {
     }
 
     public void onLocalAudioMuteClicked(View view) {
-        mMuted = !mMuted;
-        mRtcEngine.muteLocalAudioStream(mMuted);
-        int res = mMuted ? R.drawable.btn_mute : R.drawable.btn_unmute;
-        mMuteBtn.setImageResource(res);
+        mAudioMuted = !mAudioMuted;
+        mRtcEngine.muteLocalAudioStream(mAudioMuted);
+        int res = mAudioMuted ? R.drawable.btn_mute : R.drawable.btn_unmute;
+        mMuteAudioBtn.setImageResource(res);
     }
 
     public void onSwitchCameraClicked(View view) {
@@ -586,5 +632,14 @@ public class VideoChatViewActivity extends AppCompatActivity {
 
     public Boolean isOneToMany() {
         return sessionMode == ONE_TO_MANY_BYJUS;
+    }
+
+    public void onLocalVideoMuteClicked(View view) {
+        mVideoMuted = !mVideoMuted;
+        mRtcEngine.muteLocalVideoStream(mVideoMuted);
+        int res = mVideoMuted ? R.drawable.btn_vid_mute : R.drawable.btn_vid_unmute;
+        mMuteVideoBtn.setImageResource(res);
+        mRtcEngine.enableLocalVideo(!mVideoMuted);
+        localQualityTextView.setText("Local video is disabled");
     }
 }
