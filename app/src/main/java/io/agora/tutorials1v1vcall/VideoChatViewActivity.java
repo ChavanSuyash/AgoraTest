@@ -25,6 +25,8 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.File;
 import java.util.Random;
 
@@ -374,7 +376,27 @@ public class VideoChatViewActivity extends AppCompatActivity {
         webView.setScrollBarStyle(WebView.SCROLLBARS_OUTSIDE_OVERLAY);
         webView.setScrollbarFadingEnabled(false);
 
-        WebViewClient webViewClient = new AppWebViewClient(progressBar);
+        WebViewClient webViewClient = new AppWebViewClient(new AppWebViewClient.LoadingListener() {
+            @Override
+            public void onWebViewPageLoadingFailed(@NotNull String errorMsg) {
+                if (webLogView == null) return;
+                webLogView.logE(errorMsg);
+                if (progressBar == null) return;
+                progressBar.setVisibility(View.GONE);
+            }
+
+            @Override
+            public void onWebViewPageLoadingFinished() {
+                if (progressBar == null) return;
+                progressBar.setVisibility(View.GONE);
+            }
+
+            @Override
+            public void onWebViewPageLoadingStarted() {
+                if (progressBar == null) return;
+                progressBar.setVisibility(View.VISIBLE);
+            }
+        });
 
 
         //turn on debugging
@@ -385,7 +407,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
     }
 
     private void loadWhiteBoard() {
-        webView.setWebChromeClient(new AppWebChromeClient(progressBar, webLogView));
+        webView.setWebChromeClient(new AppWebChromeClient(webLogView));
         String url = "https://tutor-plus-staging.tllms.com/whiteboard/" + channelId
                 + "/false/false/480p/true/" + localUid + "/" + (isBroadcastMode() ? "live" : "rtc");
         webView.loadUrl(url);
@@ -574,6 +596,15 @@ public class VideoChatViewActivity extends AppCompatActivity {
         super.onDestroy();
         leaveChannel();
         RtcEngine.destroy();
+    }
+
+    @Override
+    public void onBackPressed() {
+        super.onBackPressed();
+        ((FrameLayout) findViewById(R.id.webview_parent)).removeAllViews();
+        leaveChannel();
+        RtcEngine.destroy();
+        webView.destroy();
     }
 
     private void leaveChannel() {

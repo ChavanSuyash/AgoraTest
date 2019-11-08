@@ -9,6 +9,7 @@
     tools:context="io.agora.tutorials1v1vcall.VideoChatViewActivity">
 
     <FrameLayout
+        android:id="@+id/webview_parent"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_above="@id/control_panel"
@@ -96,7 +97,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_margin="8dp"
-                android:text="Local Network Quailty"
+                android:text="Local Network Quality"
                 android:textColor="@color/white"
                 android:textSize="12sp" />
 

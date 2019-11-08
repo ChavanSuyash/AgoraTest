@@ -111,4 +111,8 @@ class EnterChannelIdActivity : AppCompatActivity() {
         return Base64.encodeToString(this.toByteArray(charset("UTF-8")), Base64.NO_WRAP)
     }
 
+    fun launchNetworkTestActivity(view: View) {
+        startActivity(Intent(this, NetworkTestActivity::class.java))
+    }
+
 }
