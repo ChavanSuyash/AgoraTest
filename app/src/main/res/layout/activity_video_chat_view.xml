@@ -15,7 +15,7 @@
         android:layout_above="@id/control_panel"
         android:layout_toStartOf="@id/parent_video_view_container">
 
-        <WebView
+        <wendu.dsbridge.DWebView
             android:id="@+id/webView"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />

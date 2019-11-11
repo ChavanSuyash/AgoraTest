@@ -31,7 +31,7 @@ public class NetworkTestActivity extends AppCompatActivity {
         }
 
         @Override
-        public void onLastmileProbeResult(final IRtcEngineEventHandler.LastmileProbeResult result) {
+        public void onLastmileProbeResult(final LastmileProbeResult result) {
             runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
@@ -83,6 +83,7 @@ public class NetworkTestActivity extends AppCompatActivity {
 
     protected void deInitUIandEvent() {
         mRtcEngine.stopLastmileProbeTest();
+        RtcEngine.destroy();
     }
 
     @Override

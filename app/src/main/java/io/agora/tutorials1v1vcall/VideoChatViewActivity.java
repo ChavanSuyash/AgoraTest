@@ -15,6 +15,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.View;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -28,6 +29,8 @@ import android.widget.Toast;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 import io.agora.rtc.Constants;
@@ -35,9 +38,24 @@ import io.agora.rtc.IRtcEngineEventHandler;
 import io.agora.rtc.RtcEngine;
 import io.agora.rtc.video.VideoCanvas;
 import io.agora.rtc.video.VideoEncoderConfiguration;
+import io.agora.rtm.ErrorInfo;
+import io.agora.rtm.ResultCallback;
+import io.agora.rtm.RtmChannelAttribute;
+import io.agora.rtm.RtmChannelListener;
+import io.agora.rtm.RtmChannelMember;
+import io.agora.rtm.RtmClientListener;
+import io.agora.rtm.RtmMessage;
+import io.agora.rtm.RtmStatusCode;
 import io.agora.tutorials1v1vcall.base.AppWebChromeClient;
 import io.agora.tutorials1v1vcall.base.AppWebViewClient;
 import io.agora.uikit.logger.LoggerRecyclerView;
+
+import io.agora.rtm.RtmClient;
+import io.agora.rtm.RtmChannel;
+
+import io.agora.tutorials1v1vcall.base.ChatManager;
+
+import wendu.dsbridge.DWebView;
 
 import static io.agora.rtc.Constants.REMOTE_VIDEO_STATE_DECODING;
 import static io.agora.rtc.video.VideoEncoderConfiguration.ORIENTATION_MODE.ORIENTATION_MODE_ADAPTIVE;
@@ -62,12 +80,16 @@ public class VideoChatViewActivity extends AppCompatActivity {
     private boolean mAudioMuted;
     private boolean mVideoMuted;
 
+    private ChatManager mChatManager;
+    private RtmClient mRtmClient;
+    private RtmChannel mRtmChannel;
+
     private FrameLayout mLocalContainer;
     private RelativeLayout mRemoteContainer;
     private SurfaceView mRemoteView;
     private ImageView mMuteAudioBtn, mMuteVideoBtn;
     private ProgressBar progressBar;
-    private WebView webView;
+    private DWebView webView;
     private TextView remoteQualityTextView;
     private TextView localQualityTextView;
     private int localUid;
@@ -78,12 +100,30 @@ public class VideoChatViewActivity extends AppCompatActivity {
     public static final int ONE_TO_MANY_BYJUS = 600;
     public static final String SESSION_MODE = "SESSION_MODE";
     private int sessionMode;
+    private RtmClientListener rtmClientListener = new RtmClientListener() {
+        @Override
+        public void onConnectionStateChanged(int state, int reason) {
+            webView.callHandler("onConnectionStateChanged", new Object[]{state, reason});
+        }
+
+        @Override
+        public void onMessageReceived(RtmMessage rtmMessage, String peerId) {
+        }
+
+        @Override
+        public void onTokenExpired() {
+        }
+
+        @Override
+        public void onPeersOnlineStatusChanged(Map<String, Integer> var1) {
+        }
+    };
 
 
     // Customized logger view
     private LoggerRecyclerView appLogView, webLogView;
 
-    String channelId;
+    public String channelId;
     int retryCount = 0;
 
 
@@ -242,6 +282,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
                 AlertDialog alertDialog = new AlertDialog.Builder(VideoChatViewActivity.this).create();
                 alertDialog.setTitle("Alert");
                 alertDialog.setMessage("Your internet is down, please check the connection and try again.");
+                alertDialog.setCancelable(false);
                 alertDialog.setButton(AlertDialog.BUTTON_NEUTRAL, "OK",
                         new DialogInterface.OnClickListener() {
                             public void onClick(DialogInterface dialog, int which) {
@@ -310,6 +351,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
         }
         //End
 
+        mChatManager = new ChatManager(this);
         readParams();
         initUI();
         loadWhiteBoard();
@@ -334,6 +376,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
                 checkSelfPermission(REQUESTED_PERMISSIONS[1], PERMISSION_REQ_ID) &&
                 checkSelfPermission(REQUESTED_PERMISSIONS[2], PERMISSION_REQ_ID)) {
             initEngineAndSetupVideo();
+            initRtmAndJoinChannel();
             performLastMileTestAndJoinChannel(channelId);
             //loadWhiteBoard();
         }
@@ -373,8 +416,9 @@ public class VideoChatViewActivity extends AppCompatActivity {
         wvSettings.setBuiltInZoomControls(true);
         wvSettings.setDisplayZoomControls(false);
 
-        webView.setScrollBarStyle(WebView.SCROLLBARS_OUTSIDE_OVERLAY);
+        webView.setScrollBarStyle(DWebView.SCROLLBARS_OUTSIDE_OVERLAY);
         webView.setScrollbarFadingEnabled(false);
+        webView.addJavascriptObject(new JsApi(), null);
 
         WebViewClient webViewClient = new AppWebViewClient(new AppWebViewClient.LoadingListener() {
             @Override
@@ -401,7 +445,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
 
         //turn on debugging
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            WebView.setWebContentsDebuggingEnabled(true);
+            DWebView.setWebContentsDebuggingEnabled(true);
         }
         webView.setWebViewClient(webViewClient);
     }
@@ -469,6 +513,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
             // Here we continue only if all permissions are granted.
             // The permissions can also be granted in the system settings manually.
             initEngineAndSetupVideo();
+            initRtmAndJoinChannel();
             performLastMileTestAndJoinChannel(channelId);
         }
     }
@@ -498,6 +543,143 @@ public class VideoChatViewActivity extends AppCompatActivity {
             mRtcEngine.startPreview();
         }
     }
+
+    private void initRtmAndJoinChannel() {
+        mChatManager.init();
+        mChatManager.registerListener(rtmClientListener);
+        mRtmClient = mChatManager.getRtmClient();
+        //Just to make sure  no  previous login/session found
+        mRtmClient.logout(new ResultCallback<Void>() {
+            @Override
+            public void onSuccess(Void aVoid) {
+                rtmLogin();
+            }
+
+            @Override
+            public void onFailure(ErrorInfo errorInfo) {
+                webView.callHandler("loginFailed", new Object[]{});
+                rtmLogin();
+            }
+        });
+    }
+
+    public void rtmLogin() {
+        mRtmClient.login(null, String.valueOf(localUid), new ResultCallback<Void>() {
+            @Override
+            public void onSuccess(Void aVoid) {
+                createChannel();
+                joinChannel();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        appLogView.logI("Rtm join success");
+                    }
+                });
+            }
+
+            @Override
+            public void onFailure(ErrorInfo errorInfo) {
+                showLongToast("RtmClient login failed");
+            }
+        });
+    }
+
+    private void joinChannel() {
+        mRtmChannel.join(new ResultCallback<Void>() {
+            @Override
+            public void onSuccess(Void aVoid) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        appLogView.logI("Rtm join success");
+                    }
+                });
+            }
+
+            @Override
+            public void onFailure(ErrorInfo errorInfo) {
+                showLongToast("RtmChannel join failed");
+            }
+        });
+    }
+
+    private void createChannel() {
+        mRtmChannel = mRtmClient.createChannel(channelId, new RtmChannelListener() {
+            @Override
+            public void onMemberCountUpdated(int i) {
+            }
+
+            @Override
+            public void onAttributesUpdated(List<RtmChannelAttribute> list) {
+            }
+
+            @Override
+            public void onMessageReceived(final RtmMessage message, final RtmChannelMember fromMember) {
+                final String account = fromMember.getUserId();
+                final String msg = message.getText();
+                webView.callHandler("onChannelMessage", new Object[]{msg});
+
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        appLogView.logI("onMessageReceived account = " + account);
+                    }
+                });
+            }
+
+            @Override
+            public void onMemberJoined(RtmChannelMember member) {
+            }
+
+            @Override
+            public void onMemberLeft(RtmChannelMember member) {
+            }
+        });
+    }
+
+    /**
+     * API CALL: send message to a channel
+     */
+    void nativeSendChannelMessage(String content) {
+        // step 1: create a message
+        RtmMessage message = mRtmClient.createMessage();
+        message.setText(content);
+
+        appLogView.logI("Sending rtm channel message");
+
+        // step 2: send message to channel
+        mRtmChannel.sendMessage(message, new ResultCallback<Void>() {
+            @Override
+            public void onSuccess(Void aVoid) {
+                appLogView.logI("Send success");
+            }
+
+            @Override
+            public void onFailure(ErrorInfo errorInfo) {
+                // refer to RtmStatusCode.ChannelMessageState for the message state
+                final int errorCode = errorInfo.getErrorCode();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        switch (errorCode) {
+                            case RtmStatusCode.ChannelMessageError.CHANNEL_MESSAGE_ERR_TIMEOUT:
+                            case RtmStatusCode.ChannelMessageError.CHANNEL_MESSAGE_ERR_FAILURE:
+                                appLogView.logE("Send failure, code = " + errorCode);
+                                break;
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    class JsApi {
+        @JavascriptInterface
+        public void sendChannelMessage(Object msg) {
+            nativeSendChannelMessage((String) msg);
+        }
+    }
+
 
     private void performLastMileTestAndJoinChannel(String channelID) {
         if (isBroadcastAudienceMode()) {
@@ -594,17 +776,23 @@ public class VideoChatViewActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        leaveChannel();
-        RtcEngine.destroy();
+        destroy();
     }
 
     @Override
     public void onBackPressed() {
         super.onBackPressed();
-        ((FrameLayout) findViewById(R.id.webview_parent)).removeAllViews();
+        destroy();
+    }
+
+    public void destroy() {
+        FrameLayout parent = ((FrameLayout) findViewById(R.id.webview_parent));
+        if (parent != null) parent.removeAllViews();
+        if (webView != null) webView.destroy();
+        mChatManager.unregisterListener(rtmClientListener);
+        mChatManager.destroy();
         leaveChannel();
         RtcEngine.destroy();
-        webView.destroy();
     }
 
     private void leaveChannel() {
@@ -646,7 +834,7 @@ public class VideoChatViewActivity extends AppCompatActivity {
     }
 
     public Boolean isBroadcastMode() {
-        return sessionMode == HOST_MODE || sessionMode == AUDIENCE_MODE;
+        return sessionMode == HOST_MODE || sessionMode == AUDIENCE_MODE || sessionMode == ONE_TO_MANY_BYJUS;
     }
 
     public Boolean isBroadcastAudienceMode() {
