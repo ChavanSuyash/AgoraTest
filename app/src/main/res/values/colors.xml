@@ -16,4 +16,14 @@
     <color name="primary_text">#212121</color>
     <color name="secondary_text">#757575</color>
 
+    <!--<color name="dark_black">#CC262626</color>-->
+
+    <color name="agora_blue">#006AD8</color>
+
+    <color name="transparent_75_white">#ACFFFFFF</color>
+
+    <color name="black_light">#CC222222</color>
+
+    <color name="dark_black">#FF333333</color>
+
 </resources>

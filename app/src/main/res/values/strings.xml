@@ -9,4 +9,15 @@
     <!-- You will need to deploy your own token server for production release -->
     <!-- Leave this value empty if Security keys/Token is not enabled for your project -->
     <string name="agora_access_token">0063e2da2704df34808a5a6c5faa376a7f4IAD6tQEjn3ZRCdvhL4VlTI0lgHJ9GkfsY/8OlkvM8dOnQuXf4+0AAAAAEAAgTwv72k2gXQEAAQDaTaBd</string>
+
+
+
+    <string name="label_options">Options</string>
+    <string name="label_network_testing">Testing…</string>
+    <string name="label_network_test_result">Test Result</string>
+    <string name="label_debug">Debug</string>
+    <string name="label_quality">Quality</string>
+    <string name="label_rtt">RTT</string>
+    <string name="label_uplink_packet_loss">Uplink Packet Loss</string>
+    <string name="label_downlink_packet_loss">Downlink Packet Loss</string>
 </resources>

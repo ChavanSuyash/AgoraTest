@@ -6,6 +6,22 @@
     android:layout_height="match_parent"
     tools:context=".EnterChannelIdActivity">
 
+    <android.support.v7.widget.AppCompatButton
+        android:id="@+id/start_network_test_btn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="32dp"
+        android:layout_marginEnd="32dp"
+        android:onClick="launchNetworkTestActivity"
+        android:text="Network Test"
+        android:textAllCaps="false"
+        android:textColor="@color/white"
+        android:textSize="16sp"
+        app:backgroundTint="@color/agora_blue"
+        app:layout_constraintBottom_toTopOf="@+id/version_tv"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
     <android.support.v7.widget.Toolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"

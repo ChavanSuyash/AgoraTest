@@ -18,7 +18,8 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
-        <activity android:name=".EnterChannelIdActivity"
+        <activity
+            android:name=".EnterChannelIdActivity"
             android:screenOrientation="landscape"
             android:theme="@style/FullScreenVideoTheme">
             <intent-filter>
@@ -34,7 +35,13 @@
         <activity
             android:name=".VideoChatViewActivity"
             android:screenOrientation="landscape"
-            android:theme="@style/FullScreenVideoTheme"/>
+            android:theme="@style/FullScreenVideoTheme" />
+
+        <activity
+            android:name=".NetworkTestActivity"
+            android:screenOrientation="landscape"
+            android:theme="@style/FullScreenVideoTheme" />
+
     </application>
 
 </manifest>
